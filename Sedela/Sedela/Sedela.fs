@@ -8,11 +8,11 @@ open Prime
 type Offset = int
 
 type Block =
-    { Id : Guid
-      Text : string
-      Incr : int
+    { Text : string
+      Children : Block List
       Next : Block option
-      Appends : Block List }
+      Incr : int
+      Id : Guid }
 
 type Block' =
     { Entries : (string * Block' option) list }
@@ -83,12 +83,12 @@ module Sedela =
             if  String.isEmpty text ||
                 offsetChars = offset then
                 let! block = recur (parseBlock offset incr)
-                return Some { Id = makeGuid (); Text = text; Incr = incr; Next = block; Appends = List () }
+                return Some { Id = makeGuid (); Text = text; Incr = incr; Next = block; Children = List () }
             elif offsetChars > offset then
                 let offset = offsetChars
                 let incr = inc incr
                 let! block = recur (parseBlock offset incr)
-                return Some { Id = makeGuid (); Text = text; Incr = incr; Next = block; Appends = List () }
+                return Some { Id = makeGuid (); Text = text; Incr = incr; Next = block; Children = List () }
             else return! backtrack position }
 
     let parseBlocks =
@@ -105,41 +105,45 @@ module Sedela =
         getBlockChildren' block result
         List.ofSeq result
 
+    let getBlockFamily block =
+        block :: getBlockChildren block
+
     let flattenBlock blockParent blockChildren =
         let mutable blockParent = blockParent
         for blockChild in blockChildren do
             if blockChild.Incr = blockParent.Incr then
                 () // orphan - nothing to do
-            elif blockChild.Incr = blockParent.Incr - 1 then
-                blockParent.Appends.Add blockChild
-            elif blockChild.Incr = blockParent.Incr - 2 then
+            elif blockChild.Incr = blockParent.Incr + 1 then
+                blockParent.Children.Add blockChild
+            elif blockChild.Incr = blockParent.Incr + 2 then
                 blockParent <- blockParent.Next.Value
-                blockParent.Appends.Add blockChild
+                blockParent.Children.Add blockChild
             else failwithumf ()
 
     let flattenBlocks blocks =
-        List.iter
-            (fun block -> flattenBlock block (getBlockChildren block))
+        List.map
+            (fun block -> flattenBlock block (getBlockChildren block); block)
             blocks
 
     let terminateBlocks blocks =
         match blocks with
         | head :: tail when head.Incr = 0 ->
-            let mutable blockTop = head
-            for block in tail do
-                if block.Incr > 0 then
-                    let blockChildren = getBlockChildren block
-                    let blockEnclosing = List.findBack (fun block2 -> block2.Incr = block.Incr - 1) blockChildren
-                    blockEnclosing.Appends.Add block
-                    flattenBlock blockEnclosing blockChildren
-                else blockTop <- block
+            let mutable blockOuterTop = head
+            for blockInner in tail do
+                if blockInner.Incr > 0 then
+                    let blockOuterFamily = getBlockFamily blockOuterTop
+                    let blockOuterParent = List.findBack (fun block2 -> block2.Incr = blockInner.Incr - 1) blockOuterFamily
+                    let blockInnerFamily = getBlockFamily blockInner
+                    flattenBlock blockOuterParent blockInnerFamily
+                else blockOuterTop <- blockInner
+            List.filter (fun block -> block.Incr = 0) blocks
         | _ -> failwith "No blocks found or first expression does not start on first column."
 
     let parseBlocksFromString str =
         match run parseBlocks str with
         | Success (blockOpts, _, _) ->
             let blocks = List.definitize blockOpts
-            terminateBlocks blocks
-            flattenBlocks blocks
+            let blocks = terminateBlocks blocks
+            let blocks = flattenBlocks blocks
             blocks
         | Failure (error, _, _) -> failwith error
