@@ -2,6 +2,7 @@
 open System
 open System.Collections.Generic
 open FParsec
+open FParsec.CharParsers
 open Prime
 
 type Offset = int
@@ -33,6 +34,7 @@ type Connective =
     | NewlineBar
 
 module Sedela =
+    open FParsec
 
     let [<Literal>] NewlineChars = "\n\r"
     let [<Literal>] OffsetChars = "\t "
@@ -51,25 +53,38 @@ module Sedela =
     let parseOffset =
         many (satisfy (fun char -> OffsetChars.IndexOf char > -1))
 
+    let terminate =
+        parse {
+            do! eof
+            return None }
+
+    let recur parser =
+        attempt (terminate <|> parser)
+
+    let backtrack (position : Position) : Parser<_, _> =
+        (fun stream ->
+            stream.Seek position.Index
+            Reply (ReplyStatus.Ok, NoErrorMessages)) >>.
+        parse { return None }
+
     let rec parseBlock offset incr =
         parse {
+            let! position = getPosition
             let! offsetChars = parseOffset
             if List.length offsetChars = offset then
                 let! text = restOfLine true
-                let! block = attempt (parseBlock offset incr)
+                let! block = recur (parseBlock offset incr)
                 return Some { Id = makeGuid (); Text = text; Incr = incr; Next = block; Appends = List () }
             elif List.length offsetChars > offset then
-                let offset = List.length offsetChars
                 let! text = restOfLine true
-                let incr = int incr
-                let! block = attempt (parseBlock offset incr)
+                let offset = List.length offsetChars
+                let incr = inc incr
+                let! block = recur (parseBlock offset incr)
                 return Some { Id = makeGuid (); Text = text; Incr = incr; Next = block; Appends = List () }
-            else
-                do! fail "Reached block terminus."
-                return None }
+            else return! backtrack position }
 
     let parseBlocks =
-        many (parseBlock 0 0)
+        manyTill (parseBlock 0 0) eof
 
     let getBlockChildren block =
         let rec getBlockChildren' block (list : Block List) =
