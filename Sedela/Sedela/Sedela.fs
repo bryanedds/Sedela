@@ -50,16 +50,16 @@ module Sedela =
     let (*Literal*) IllegalNameChars = ReservedChars + StructureChars + WhitespaceChars
     let (*Literal*) IllegalNameCharsArray = Array.ofSeq IllegalNameChars
 
-    //let parseComment =
-    //    parse {
-    //        do! skipString LineCommentStr
-    //        do! skipRestOfLine true }
+    let parseComment =
+        parse {
+            do! skipString LineCommentStr
+            do! skipRestOfLine true }
 
     let parseLine =
         parse {
             let! offsetText = many (satisfy (fun char -> OffsetChars.IndexOf char > -1))
             let offset = List.length offsetText
-            let! text = restOfLine true // manyCharsTill anyChar (parseComment <|> skipNewline)
+            let! text = manyCharsTill anyChar (parseComment <|> skipNewline <|> eof)
             let textTrimmed = text.TrimEnd ()
             return (offset, textTrimmed) }
 
