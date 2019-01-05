@@ -50,16 +50,25 @@ module Sedela =
     let (*Literal*) IllegalNameChars = ReservedChars + StructureChars + WhitespaceChars
     let (*Literal*) IllegalNameCharsArray = Array.ofSeq IllegalNameChars
 
-    let parseOffset =
-        many (satisfy (fun char -> OffsetChars.IndexOf char > -1))
+    //let parseComment =
+    //    parse {
+    //        do! skipString LineCommentStr
+    //        do! skipRestOfLine true }
 
-    let terminate =
+    let parseLine =
         parse {
-            do! eof
-            return None }
+            let! offsetText = many (satisfy (fun char -> OffsetChars.IndexOf char > -1))
+            let offset = List.length offsetText
+            let! text = restOfLine true // manyCharsTill anyChar (parseComment <|> skipNewline)
+            let textTrimmed = text.TrimEnd ()
+            return (offset, textTrimmed) }
 
     let recur parser =
-        attempt (terminate <|> parser)
+        attempt
+            (parse {
+                do! eof
+                return None } <|>
+             parser)
 
     let backtrack (position : Position) : Parser<_, _> =
         (fun stream ->
@@ -70,14 +79,13 @@ module Sedela =
     let rec parseBlock offset incr =
         parse {
             let! position = getPosition
-            let! offsetChars = parseOffset
-            if List.length offsetChars = offset then
-                let! text = restOfLine true
+            let! (offsetChars, text) = parseLine
+            if  String.isEmpty text ||
+                offsetChars = offset then
                 let! block = recur (parseBlock offset incr)
                 return Some { Id = makeGuid (); Text = text; Incr = incr; Next = block; Appends = List () }
-            elif List.length offsetChars > offset then
-                let! text = restOfLine true
-                let offset = List.length offsetChars
+            elif offsetChars > offset then
+                let offset = offsetChars
                 let incr = inc incr
                 let! block = recur (parseBlock offset incr)
                 return Some { Id = makeGuid (); Text = text; Incr = incr; Next = block; Appends = List () }
