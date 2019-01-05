@@ -12,7 +12,10 @@
 
   <ItemGroup>
     <PackageReference Include="Prime" Version="3.2.4" />
-    <PackageReference Include="QuickGraph" Version="3.6.61119.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="4.5.4" />
   </ItemGroup>
 
 </Project>
