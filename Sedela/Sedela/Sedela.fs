@@ -111,21 +111,18 @@ module Sedela =
     let flattenBlock blockParent blockChildren =
         let mutable blockParent = blockParent
         for blockChild in blockChildren do
-            if blockChild.Incr = blockParent.Incr then
-                () // orphan - nothing to do
-            elif blockChild.Incr = blockParent.Incr + 1 then
+            if blockChild.Incr = blockParent.Incr + 1 then
                 blockParent.Children.Add blockChild
             elif blockChild.Incr = blockParent.Incr + 2 then
                 blockParent <- blockParent.Next.Value
                 blockParent.Children.Add blockChild
-            else failwithumf ()
 
     let flattenBlocks blocks =
         List.map
             (fun block -> flattenBlock block (getBlockChildren block); block)
             blocks
 
-    let terminateBlocks blocks =
+    let fixUpBlocks blocks =
         match blocks with
         | head :: tail when head.Incr = 0 ->
             let mutable blockOuterTop = head
@@ -143,7 +140,7 @@ module Sedela =
         match run parseBlocks str with
         | Success (blockOpts, _, _) ->
             let blocks = List.definitize blockOpts
-            let blocks = terminateBlocks blocks
             let blocks = flattenBlocks blocks
+            let blocks = fixUpBlocks blocks
             blocks
         | Failure (error, _, _) -> failwith error
