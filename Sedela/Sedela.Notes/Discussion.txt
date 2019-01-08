@@ -1,0 +1,18 @@
+bryaneddsToday at 12:54 PM
+the latter seems to be what people want from such a tool
+I think Conal's TCM opened up a novel space - one that I'm attempting to explore here with Sedela.
+Yes, constraints could be interesting in the generation technique.
+So, let's say I said, "The semantics are (defined as) any evaluation rules that preserve this type relation".
+What semantic tool (denotative, operational, or otherwise) might be recommended for expressing that?
+It seems that operational semantics is too narrow a tool.
+
+iitalicsToday at 1:06 PM
+You could say that in Agda w operational semantics by doing in existential over the reduction relation
+
+record Semantics (|-_:_ : Rel Term Type) where
+  field
+    _-->_ : Rel Term Term
+    type-sound : forall M N t
+      -> (|- M : t)
+      -> (M --> N)
+      -> (|- N : t)
