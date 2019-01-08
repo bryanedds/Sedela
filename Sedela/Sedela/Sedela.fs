@@ -23,9 +23,6 @@ type Opening =
     | Segmented // allows for \n| connectives
     | Unparsed of string
 
-type Node =
-    Offset * Opening * string
-
 type Connective =
     | NewlineIndent
     | NewlineThen
