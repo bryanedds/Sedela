@@ -56,9 +56,8 @@ type Block =
         | _ -> failwith "No blocks found or first expression does not start on first column."
 
 type Block' =
-    { mutable ParentOpt : Block' option
+    { ParentOpt : Block' option
       Children : Block' List
-      Text : string
       PositionBegin : Position
       PositionEnd : Position }
 
@@ -76,10 +75,13 @@ type Block' =
         leaves
 
     static member getDepth block =
-        let mutable depth = 0
+        let mutable depth = -1
         let mutable block = block
         while Option.isNone block.ParentOpt do depth <- inc depth
         depth
+
+    static member getText (textFull : string) block =
+        textFull.Substring (int block.PositionBegin.Index, int block.PositionEnd.Index)
 
     static member toIndex block =
         block.PositionBegin.Index
@@ -93,23 +95,30 @@ type Block' =
         let leafOpt = Seq.headOrDefault candidates
         leafOpt
 
-    static member makeShallow (block : Block) =
+    static member makeShallow (block : Block) (parentOpt : Block' option) =
         let block' =
-            { ParentOpt = None
+            { ParentOpt = parentOpt
               Children = List ()
-              Text = block.Text
               PositionBegin = block.PositionBegin
               PositionEnd = block.PositionEnd }
         block'
         
-    static member make block =
+    static member makeFromBlock block parentOpt =
         let rec import (block : Block) (block' : Block') =
             for child in block.Children do
-                let child' = Block'.makeShallow child
+                let child' = Block'.makeShallow child (Some block')
                 block'.Children.Add child'
                 import child block'
-        let block' = Block'.makeShallow block
+        let block' = Block'.makeShallow block parentOpt
         import block block'
+        block'
+
+    static member makeFromBlocks blocks positionBegin positionEnd =
+        let root = { ParentOpt = None; Children = List (); PositionBegin = positionBegin; PositionEnd = positionEnd }
+        for block in blocks do
+            let block' = Block'.makeFromBlock block (Some root)
+            root.Children.Add block'
+        root
 
 type Opening =
     | If // allows for \nthen, \nelif, \nelse, and indent connectives
@@ -192,5 +201,9 @@ module Sedela =
             let blocks = List.definitize blockOpts
             let blocks = Block.flattenMany blocks
             let blocks = Block.fixUp blocks
-            blocks
+            let block' =
+                let positionBegin = Position ("", 0L, 0L, 0L)
+                let positionEnd = Position ("", int64 str.Length, 0L, 0L)
+                Block'.makeFromBlocks blocks positionBegin positionEnd
+            block'
         | Failure (error, _, _) -> failwith error
