@@ -4,6 +4,7 @@ open System.Collections.Generic
 open FParsec
 open Prime
 
+[<ReferenceEquality>]
 type Block =
     { Text : string
       Children : Block List
@@ -55,6 +56,7 @@ type Block =
             List.filter (fun block -> block.Incr = 0) blocks
         | _ -> failwith "No blocks found or first expression does not start on first column."
 
+[<ReferenceEquality>]
 type Block' =
     { ParentOpt : Block' option
       Children : Block' List
@@ -92,8 +94,19 @@ type Block' =
             Array.filter
                 (fun leaf -> index >= leaf.PositionBegin.Index && index < leaf.PositionEnd.Index)
                 leaves
-        let leafOpt = Seq.headOrDefault candidates
-        leafOpt
+        Array.head candidates
+
+    static member getAncestors block =
+        let ancestors = List ()
+        let mutable block = block
+        while Option.isSome block.ParentOpt do
+            block <- block.ParentOpt.Value
+            ancestors.Add block
+        Array.ofSeq ancestors
+
+    static member isAncestor a b =
+        let ancestors = Block'.getAncestors b
+        Array.contains a ancestors
 
     static member makeShallow (block : Block) (parentOpt : Block' option) =
         let block' =
@@ -133,6 +146,12 @@ type Connective =
     | NewlineElse
     | NewlineBar
 
+type Expr =
+    | Unit
+    | If of Expr * Expr * Expr
+    | Let of string * Expr
+    | Derivation of Expr list
+
 module Sedela =
 
     let [<Literal>] NewlineChars = "\n\r"
@@ -149,16 +168,20 @@ module Sedela =
     let (*Literal*) IllegalNameChars = ReservedChars + StructureChars + WhitespaceChars
     let (*Literal*) IllegalNameCharsArray = Array.ofSeq IllegalNameChars
 
-    let parseComment =
+    let skipLineComment =
         parse {
             do! skipString LineCommentStr
             do! skipRestOfLine true }
+
+    let skipWhitespace = skipLineComment <|> skipAnyOf WhitespaceChars
+
+    let skipWhitespaces = skipMany skipWhitespace
 
     let parseLine =
         parse {
             let! offsetText = many (satisfy (fun char -> OffsetChars.IndexOf char > -1))
             let offset = List.length offsetText
-            let! text = manyCharsTill anyChar (parseComment <|> skipNewline <|> eof)
+            let! text = manyCharsTill anyChar (skipLineComment <|> skipNewline <|> eof)
             let textTrimmed = text.TrimEnd ()
             return (offset, textTrimmed) }
 
@@ -207,3 +230,88 @@ module Sedela =
                 Block'.makeFromBlocks blocks positionBegin positionEnd
             block'
         | Failure (error, _, _) -> failwith error
+
+    let parseExpr block =
+        parse {
+            return Unit }
+    
+    let parseAtomChars =
+        many1 (noneOf (StructureChars + WhitespaceChars))
+
+    let parseAtom block =
+        parse {
+            let! chars = parseAtomChars
+            do! skipWhitespaces
+            let str = chars |> String.implode |> fun str -> str.TrimEnd ()
+            return str }
+
+    let parseTill limiter block =
+        parse {
+            let! position = getPosition
+            let currentBlock = Block'.fromIndex position.Index block
+            if Block'.isAncestor currentBlock limiter
+            then return! fail "End of derivation."
+            else return Unit }
+
+    let parseDerivationEnclosed limiter block =
+        parse {
+            do! skipString "("
+            do! skipWhitespaces
+            let! expr = parseExpr block
+            do! skipString ")"
+            do! skipWhitespaces
+            return expr }
+
+    let rec parseDerivation limiter block =
+        parse {
+            let! _ =
+                many1Till
+                    (parseDerivationEnclosed limiter block <|> parseDerivation limiter block)
+                    (parseTill limiter block)
+            return Unit }
+
+    let parseLet block =
+        parse {
+
+            let! letPosition = getPosition
+            let letBlock = Block'.fromIndex letPosition.Index block
+            do! skipString "let"
+            do! skipWhitespaces
+            let! binding = parseAtomChars
+            do! skipWhitespaces
+            do! skipString "="
+            do! skipWhitespaces
+            let! body = parseExpr block
+            return Let (String.implode binding, body) }
+
+    let parseIf block =
+        parse {
+            
+            // if
+            let! ifPosition = getPosition
+            let ifBlock = Block'.fromIndex ifPosition.Index block
+            do! skipString "if"
+            do! skipWhitespaces
+            let! predicate = parseExpr block
+            do! skipWhitespaces
+
+            // then
+            let! thenPosition = getPosition
+            let thenBlock = Block'.fromIndex thenPosition.Index block
+            do! skipString "then"
+            do! skipWhitespaces
+            let! consequent = parseExpr block
+            if thenBlock.ParentOpt = ifBlock.ParentOpt then
+                
+                // else
+                let! elsePosition = getPosition
+                let elseBlock = Block'.fromIndex elsePosition.Index block
+                do! skipString "else"
+                do! skipWhitespaces
+                let! alternative = parseExpr block
+                if elseBlock.ParentOpt = ifBlock.ParentOpt
+                then return If (predicate, consequent, alternative)
+                else return! fail "Invalid if layout."
+                
+            // failure
+            else return! fail "Invalid if layout." }
