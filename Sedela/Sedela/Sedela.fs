@@ -199,9 +199,6 @@ module Sedela =
             Reply (ReplyStatus.Ok, NoErrorMessages)) >>.
         parse { return None }
 
-    let (parseExpr : Parser<Expr, BlockState>, private parseExprRef : Parser<Expr, BlockState> ref) =
-        createParserForwardedToRef ()
-
     let parseLine =
         parse {
             let! offsetText = many (satisfy (fun char -> OffsetChars.IndexOf char > -1))
@@ -242,18 +239,15 @@ module Sedela =
                 Block'.makeFromBlocks blocks positionBegin positionEnd
             block'
         | Failure (error, _, _) -> failwith error
-    
-    let parseAtomStr : Parser<string, BlockState> =
+
+    let (parseExpr : Parser<Expr, BlockState>, private parseExprRef : Parser<Expr, BlockState> ref) =
+        createParserForwardedToRef ()
+
+    let parseAtom : Parser<string, BlockState> =
         parse {
             let! chars = many1 (noneOf (StructureChars + WhitespaceChars))
             let str = (chars |> String.implode).TrimEnd ()
             return str }
-
-    let parseBinding : Parser<Expr, BlockState> =
-        parse {
-            let! atomStr = parseAtomStr
-            do! skipWhitespaces
-            return Binding atomStr }
 
     let parseTill : Parser<Expr, BlockState> =
         parse {
@@ -264,22 +258,44 @@ module Sedela =
             then return! fail "End of derivation."
             else return Unit }
 
+    let parseSubexpr =
+        parse {
+            let! position = getPosition
+            let! oldState = getUserState
+            do! updateUserState (fun state -> { state with Limiter = Block'.fromIndex position.Index state.Root })
+            let! expr = parseExpr
+            do! setUserState oldState
+            return expr }
+
+    let parseSubexprs =
+        many1Till parseSubexpr parseTill
+
+    let parseBinding : Parser<Expr, BlockState> =
+        parse {
+            let! atomStr = parseAtom
+            do! skipWhitespaces
+            return Binding atomStr }
+
     let parseDerivationEnclosed : Parser<Expr, BlockState> =
         parse {
             do! skipString "("
             do! skipWhitespaces
-            let! expr = parseExpr
+            let! exprs = many1Till parseSubexpr parseTill
             do! skipString ")"
             do! skipWhitespaces
-            return expr }
+            return Derivation exprs }
 
     let rec parseDerivation : Parser<Expr, BlockState> =
         parse {
-            let! _ =
+            let! position = getPosition
+            let! oldState = getUserState
+            do! updateUserState (fun state -> { state with Limiter = Block'.fromIndex position.Index state.Root })
+            let! exprs =
                 many1Till
                     (parseDerivationEnclosed <|> parseDerivation)
                     parseTill
-            return Unit }
+            do! setUserState oldState
+            return Derivation exprs }
 
     let parseLet : Parser<Expr, BlockState>=
         parse {
@@ -289,11 +305,11 @@ module Sedela =
             let letBlock = Block'.fromIndex letPosition.Index letState.Root
             do! skipString "let"
             do! skipWhitespaces
-            let! binding = parseAtomStr
+            let! binding = parseAtom
             do! skipWhitespaces
             do! skipString "="
             do! skipWhitespaces
-            let! body = parseExpr
+            let! body = parseSubexpr
             return Let (binding, body) }
 
     let parseIf =
@@ -305,7 +321,7 @@ module Sedela =
             let ifBlock = Block'.fromIndex ifPosition.Index ifState.Root
             do! skipString "if"
             do! skipWhitespaces
-            let! predicate = parseExpr
+            let! predicate = parseSubexpr
             do! skipWhitespaces
 
             // then
@@ -314,7 +330,7 @@ module Sedela =
             let thenBlock = Block'.fromIndex thenPosition.Index thenState.Root
             do! skipString "then"
             do! skipWhitespaces
-            let! consequent = parseExpr
+            let! consequent = parseSubexpr
             if thenBlock.ParentOpt = ifBlock.ParentOpt then
                 
                 // else
@@ -323,7 +339,7 @@ module Sedela =
                 let elseBlock = Block'.fromIndex elsePosition.Index elseState.Root
                 do! skipString "else"
                 do! skipWhitespaces
-                let! alternative = parseExpr
+                let! alternative = parseSubexpr
                 if elseBlock.ParentOpt = ifBlock.ParentOpt
                 then return If (predicate, consequent, alternative)
                 else return! fail "Invalid if layout."
