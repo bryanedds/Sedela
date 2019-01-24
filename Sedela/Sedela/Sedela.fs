@@ -72,30 +72,29 @@ type Block' =
         flatten' block blocks
         Array.ofSeq blocks
 
-    static member getLeaves block =
-        let blocks = Block'.getFlattened block
-        let leaves = Array.filter (fun block -> block.Children.Count = 0) blocks
-        leaves
-
     static member getDepth block =
         let mutable depth = -1
         let mutable block = block
         while Option.isNone block.ParentOpt do depth <- inc depth
         depth
 
+    static member getLength block =
+        block.PositionEnd.Index - block.PositionBegin.Index
+
     static member getText (textFull : string) block =
         textFull.Substring (int block.PositionBegin.Index, int block.PositionEnd.Index)
+
+    static member containsIndex index block =
+        index >= block.PositionBegin.Index && index < block.PositionEnd.Index
 
     static member toIndex block =
         block.PositionBegin.Index
 
     static member fromIndex index block =
-        let leaves = Block'.getLeaves block
-        let candidates =
-            Array.filter
-                (fun leaf -> index >= leaf.PositionBegin.Index && index < leaf.PositionEnd.Index)
-                leaves
-        Array.head candidates
+        let blocks = Block'.getFlattened block
+        let candidates = Array.filter (Block'.containsIndex index) blocks
+        let ordered = Array.sortBy Block'.getLength candidates
+        Array.head ordered
 
     static member getAncestors block =
         let ancestors = List ()
@@ -227,7 +226,7 @@ module Sedela =
     let parseBlocks =
         manyTill (parseBlock 0 0) eof
 
-    let parseBlocksFromString str =
+    let tryParseBlockFromString str =
         match run parseBlocks str with
         | Success (blockOpts, _, _) ->
             let blocks = List.definitize blockOpts
@@ -237,11 +236,14 @@ module Sedela =
                 let positionBegin = Position ("", 0L, 0L, 0L)
                 let positionEnd = Position ("", int64 str.Length, 0L, 0L)
                 Block'.makeFromBlocks blocks positionBegin positionEnd
-            block'
-        | Failure (error, _, _) -> failwith error
+            Right block'
+        | Failure (error, _, _) -> Left error
 
     let (parseExpr : Parser<Expr, BlockState>, private parseExprRef : Parser<Expr, BlockState> ref) =
         createParserForwardedToRef ()
+
+    let parseExprs =
+        many parseExpr
 
     let parseAtom : Parser<string, BlockState> =
         parse {
@@ -249,15 +251,15 @@ module Sedela =
             let str = (chars |> String.implode).TrimEnd ()
             return str }
 
-    let parseTill : Parser<Expr, BlockState> =
+    let parseTill : Parser<_, BlockState> =
         parse {
             let! position = getPosition
             let! state = getUserState
             let currentBlock = Block'.fromIndex position.Index state.Root
             if Block'.isAncestor currentBlock state.Limiter
-            then return! fail "End of derivation."
-            else return Unit }
-
+            then return ()
+            else return! fail "Still parsing..." }
+        
     let subparse parse : Parser<_, BlockState> =
         Primitives.parse {
             let! position = getPosition
@@ -267,50 +269,42 @@ module Sedela =
             do! setUserState oldState
             return expr }
 
-    let parseSubexprs =
-        many1Till (subparse parseExpr) parseTill
-
     let parseBinding : Parser<Expr, BlockState> =
         parse {
             let! atomStr = parseAtom
             do! skipWhitespaces
             return Binding atomStr }
 
-    let parseDerivationEnclosed : Parser<Expr, BlockState> =
+    let parseEnclosure : Parser<Expr, BlockState> =
         parse {
             do! skipString "("
             do! skipWhitespaces
-            let! exprs = many1Till (subparse parseExpr) parseTill
+            let! expr = subparse parseExpr
             do! skipString ")"
             do! skipWhitespaces
-            return Derivation exprs }
+            return expr }
 
     let rec parseDerivation : Parser<Expr, BlockState> =
         parse {
-            let! exprs =
-                subparse
-                    (Primitives.parse {
-                        let! exprs =
-                            many1Till
-                                (parseDerivationEnclosed <|> parseDerivation)
-                                parseTill
-                        return exprs })
+            let! exprs = subparse (Primitives.parse {
+                let! binding = parseBinding
+                let! exprs = many1Till parseExpr parseTill
+                return binding :: exprs })
             return Derivation exprs }
 
-    let parseLet : Parser<Expr, BlockState>=
+    let parseLet : Parser<Expr, BlockState> =
         parse {
-
-            let! letPosition = getPosition
-            let! letState = getUserState
-            let letBlock = Block'.fromIndex letPosition.Index letState.Root
-            do! skipString "let"
-            do! skipWhitespaces
-            let! binding = parseAtom
-            do! skipWhitespaces
-            do! skipString "="
-            do! skipWhitespaces
-            let! body = subparse parseExpr
-            return Let (binding, body) }
+            let! expr =
+                subparse (parse {
+                    do! skipString "let"
+                    do! skipWhitespaces
+                    let! binding = parseAtom
+                    do! skipWhitespaces
+                    do! skipString "="
+                    do! skipWhitespaces
+                    let! body = subparse parseExpr
+                    return Let (binding, body) })
+            return expr }
 
     let parseIf =
         parse {
@@ -348,7 +342,16 @@ module Sedela =
             else return! fail "Invalid if layout." }
             
     do parseExprRef :=
-        attempt parseBinding <|>
-        attempt parseDerivation <|>
         attempt parseLet <|>
-        attempt parseIf
+        attempt parseIf <|>
+        attempt parseBinding <|>
+        attempt parseEnclosure <|>
+        attempt parseDerivation
+
+    let tryParseFromString str =
+        match tryParseBlockFromString str with
+        | Right block ->
+            match runParserOnString parseExprs { Root = block; Limiter = block } "" str with
+            | Success (exprs, _, _) -> Right exprs
+            | Failure (error, _, _) -> Left error
+        | Left error -> Left error

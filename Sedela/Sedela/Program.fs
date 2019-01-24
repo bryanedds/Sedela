@@ -6,6 +6,5 @@ open Sedela
 [<EntryPoint>]
 let main _ =
     let str = File.ReadAllText "Test.txt"
-    let blocks = Sedela.parseBlocksFromString str
-    ignore blocks
+    let _ = Sedela.tryParseFromString str
     0 // return an integer exit code
