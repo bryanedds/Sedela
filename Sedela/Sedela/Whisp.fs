@@ -5,184 +5,182 @@ open FParsec
 open Prime
 #nowarn "40"
 
-[<ReferenceEquality>]
-type Block =
-    { Text : string
-      Children : Block List
-      Next : Block option
-      Incr : int
-      PositionBegin : Position
-      PositionEnd : Position
-      Id : Guid }
+/// WHISP - A WHItespace-Significant Parser.
+[<RequireQualifiedAccess>]
+module Whisp =
 
-    static member getChildren block =
-        let rec getBlockChildren' block (list : Block List) =
-            match block.Next with
-            | Some blockNext ->
-                list.Add blockNext
-                getBlockChildren' blockNext list
-            | None -> ()
-        let result = List ()
-        getBlockChildren' block result
-        List.ofSeq result
+    [<ReferenceEquality>]
+    type Block =
+        { Text : string
+          Children : Block List
+          Next : Block option
+          Incr : int
+          PositionBegin : Position
+          PositionEnd : Position
+          Id : Guid }
 
-    static member getFamily block =
-        block :: Block.getChildren block
+        static member getChildren block =
+            let rec getBlockChildren' block (list : Block List) =
+                match block.Next with
+                | Some blockNext ->
+                    list.Add blockNext
+                    getBlockChildren' blockNext list
+                | None -> ()
+            let result = List ()
+            getBlockChildren' block result
+            List.ofSeq result
 
-    static member flatten blockParent blockChildren =
-        let mutable blockParent = blockParent
-        for blockChild in blockChildren do
-            if blockChild.Incr = blockParent.Incr + 1 then
-                blockParent.Children.Add blockChild
-            elif blockChild.Incr = blockParent.Incr + 2 then
-                blockParent <- blockParent.Next.Value
-                blockParent.Children.Add blockChild
+        static member getFamily block =
+            block :: Block.getChildren block
 
-    static member flattenMany blocks =
-        List.map
-            (fun block -> Block.flatten block (Block.getChildren block); block)
-            blocks
+        static member flatten blockParent blockChildren =
+            let mutable blockParent = blockParent
+            for blockChild in blockChildren do
+                if blockChild.Incr = blockParent.Incr + 1 then
+                    blockParent.Children.Add blockChild
+                elif blockChild.Incr = blockParent.Incr + 2 then
+                    blockParent <- blockParent.Next.Value
+                    blockParent.Children.Add blockChild
 
-    static member fixUp blocks =
-        match blocks with
-        | head :: tail when head.Incr = 0 ->
-            let mutable blockOuterTop = head
-            for blockInner in tail do
-                if blockInner.Incr > 0 then
-                    let blockOuterFamily = Block.getFamily blockOuterTop
-                    let blockOuterParent = List.findBack (fun block2 -> block2.Incr = blockInner.Incr - 1) blockOuterFamily
-                    let blockInnerFamily = Block.getFamily blockInner
-                    Block.flatten blockOuterParent blockInnerFamily
-                else blockOuterTop <- blockInner
-            List.filter (fun block -> block.Incr = 0) blocks
-        | _ -> failwith "No blocks found or first expression does not start on first column."
+        static member flattenMany blocks =
+            List.map
+                (fun block -> Block.flatten block (Block.getChildren block); block)
+                blocks
 
-[<ReferenceEquality>]
-type Block' =
-    { Text : string
-      ParentOpt : Block' option
-      Children : Block' List
-      PositionBegin : Position
-      PositionEnd : Position }
+        static member fixUp blocks =
+            match blocks with
+            | head :: tail when head.Incr = 0 ->
+                let mutable blockOuterTop = head
+                for blockInner in tail do
+                    if blockInner.Incr > 0 then
+                        let blockOuterFamily = Block.getFamily blockOuterTop
+                        let blockOuterParent = List.findBack (fun block2 -> block2.Incr = blockInner.Incr - 1) blockOuterFamily
+                        let blockInnerFamily = Block.getFamily blockInner
+                        Block.flatten blockOuterParent blockInnerFamily
+                    else blockOuterTop <- blockInner
+                List.filter (fun block -> block.Incr = 0) blocks
+            | _ -> failwith "No blocks found or first expression does not start on first column."
 
-    static member isRoot block =
-        Option.isNone block.ParentOpt
+    [<ReferenceEquality>]
+    type Block' =
+        { Text : string
+          ParentOpt : Block' option
+          Children : Block' List
+          PositionBegin : Position
+          PositionEnd : Position }
 
-    static member getRoot block =
-        match block.ParentOpt with
-        | Some parent -> Block'.getRoot parent
-        | None -> block
+        static member isRoot block =
+            Option.isNone block.ParentOpt
 
-    static member getFlattened block =
-        let rec flatten' block (blocks : Block' List) =
-            blocks.Add block
-            for child in block.Children do flatten' child blocks
-        let blocks = List ()
-        flatten' block blocks
-        Array.ofSeq blocks
+        static member getRoot block =
+            match block.ParentOpt with
+            | Some parent -> Block'.getRoot parent
+            | None -> block
 
-    static member getDepth block =
-        let mutable depth = -1
-        let mutable block = block
-        while Option.isNone block.ParentOpt do depth <- inc depth
-        depth
+        static member getFlattened block =
+            let rec flatten' block (blocks : Block' List) =
+                blocks.Add block
+                for child in block.Children do flatten' child blocks
+            let blocks = List ()
+            flatten' block blocks
+            Array.ofSeq blocks
 
-    static member getLength block =
-        block.PositionEnd.Index - block.PositionBegin.Index
+        static member getDepth block =
+            let mutable depth = -1
+            let mutable block = block
+            while Option.isNone block.ParentOpt do depth <- inc depth
+            depth
 
-    static member getText (fullText : string) block =
-        fullText.Substring (int block.PositionBegin.Index, int block.PositionEnd.Index)
+        static member getLength block =
+            block.PositionEnd.Index - block.PositionBegin.Index
 
-    static member containsIndex index block =
-        index >= block.PositionBegin.Index && index < block.PositionEnd.Index
+        static member getText (fullText : string) block =
+            fullText.Substring (int block.PositionBegin.Index, int block.PositionEnd.Index)
 
-    static member toIndex block =
-        block.PositionBegin.Index
+        static member containsIndex index block =
+            index >= block.PositionBegin.Index && index < block.PositionEnd.Index
 
-    static member fromIndex index block =
-        let blocks = Block'.getFlattened block
-        let candidates = Array.filter (Block'.containsIndex index) blocks
-        match Array.sortBy Block'.getLength candidates with
-        | [||] -> block
-        | ordered -> Array.head ordered
+        static member toIndex block =
+            block.PositionBegin.Index
 
-    static member getAncestors block =
-        let ancestors = List ()
-        let mutable block = block
-        while Option.isSome block.ParentOpt do
-            block <- block.ParentOpt.Value
-            ancestors.Add block
-        Array.ofSeq ancestors
+        static member fromIndex index block =
+            let blocks = Block'.getFlattened block
+            let candidates = Array.filter (Block'.containsIndex index) blocks
+            match Array.sortBy Block'.getLength candidates with
+            | [||] -> block
+            | ordered -> Array.head ordered
 
-    static member isAncestor a b =
-        let ancestors = Block'.getAncestors b
-        Array.contains a ancestors
+        static member getAncestors block =
+            let ancestors = List ()
+            let mutable block = block
+            while Option.isSome block.ParentOpt do
+                block <- block.ParentOpt.Value
+                ancestors.Add block
+            Array.ofSeq ancestors
 
-    static member makeShallow (block : Block) (parentOpt : Block' option) =
-        let block' =
-            { Text = block.Text
-              ParentOpt = parentOpt
-              Children = List ()
-              PositionBegin = block.PositionBegin
-              PositionEnd = block.PositionEnd }
-        block'
+        static member isAncestor a b =
+            let ancestors = Block'.getAncestors b
+            Array.contains a ancestors
+
+        static member makeShallow (block : Block) (parentOpt : Block' option) =
+            let block' =
+                { Text = block.Text
+                  ParentOpt = parentOpt
+                  Children = List ()
+                  PositionBegin = block.PositionBegin
+                  PositionEnd = block.PositionEnd }
+            block'
         
-    static member makeFromBlock block parentOpt =
-        let rec import (block : Block) (block' : Block') =
-            for child in block.Children do
-                let child' = Block'.makeShallow child (Some block')
-                block'.Children.Add child'
-                import child child'
-        let block' = Block'.makeShallow block parentOpt
-        import block block'
-        block'
+        static member makeFromBlock block parentOpt =
+            let rec import (block : Block) (block' : Block') =
+                for child in block.Children do
+                    let child' = Block'.makeShallow child (Some block')
+                    block'.Children.Add child'
+                    import child child'
+            let block' = Block'.makeShallow block parentOpt
+            import block block'
+            block'
 
-    static member makeFromBlocks blocks positionBegin positionEnd =
-        let root =
-            { Text = ""
-              ParentOpt = None
-              Children = List ()
-              PositionBegin = positionBegin
-              PositionEnd = positionEnd }
-        for block in blocks do
-            let block' = Block'.makeFromBlock block (Some root)
-            root.Children.Add block'
-        root
+        static member makeFromBlocks blocks positionBegin positionEnd =
+            let root =
+                { Text = ""
+                  ParentOpt = None
+                  Children = List ()
+                  PositionBegin = positionBegin
+                  PositionEnd = positionEnd }
+            for block in blocks do
+                let block' = Block'.makeFromBlock block (Some root)
+                root.Children.Add block'
+            root
 
-type BlockState =
-    { Limiter : Block'
-      Root : Block' }
+    type BlockState =
+        { Limiter : Block'
+          Root : Block' }
 
-type Opening =
-    | If // allows for \nthen, \nelif, \nelse, and indent connectives
-    | Let // allows for indent connectuves
-    | Segmented // allows for \n| connectives
-    | Unparsed of string
+    type Opening =
+        | If // allows for \nthen, \nelif, \nelse, and indent connectives
+        | Let // allows for indent connectuves
+        | Segmented // allows for \n| connectives
+        | Unparsed of string
 
-type Connective =
-    | NewlineIndent
-    | NewlineThen
-    | NewlineElif
-    | NewlineElse
-    | NewlineBar
+    type Connective =
+        | NewlineIndent
+        | NewlineThen
+        | NewlineElif
+        | NewlineElse
+        | NewlineBar
 
-type Expr =
-    | Unit
-    | Binding of string
-    | If of Expr * Expr * Expr
-    | Let of string * Expr
-    | Derivation of Expr * Expr list
-
-module Sedela =
+    type Expr =
+        | Unit
+        | Binding of string
+        | If of Expr * Expr * Expr
+        | Let of string * Expr
+        | Derivation of Expr * Expr list
 
     let [<Literal>] NewlineChars = "\n\r"
     let [<Literal>] OffsetChars = "\t "
     let [<Literal>] WhitespaceChars = OffsetChars + NewlineChars
     let [<Literal>] LineCommentStr = "//"
-
-    let [<Literal>] OpenMultilineCommentStr = "(*"
-    let [<Literal>] CloseMultilineCommentStr = "*)"
-
     let [<Literal>] ReservedChars = "{}\\#$"
     let [<Literal>] StructureCharsNoStr = "()"
     let [<Literal>] StructureChars = "\"" + StructureCharsNoStr
@@ -276,15 +274,7 @@ module Sedela =
         parse {
             do! setUserState oldState }
 
-    let rec subState parse parse2 : Parser<_, BlockState> =
-        Primitives.parse {
-            let! oldState = pushState
-            let! _ = withState parse
-            let! expr = parse2
-            do! popState oldState
-            return expr }
-
-    and withState parse : Parser<_, BlockState> =
+    let withState parse : Parser<_, BlockState> =
         Primitives.parse {
             let! position = getPosition
             let! state = getUserState
@@ -363,14 +353,20 @@ module Sedela =
 
     let parseLet : Parser<Expr, BlockState> =
         parse {
+
+            // binding
             let! letState = pushState
             do! skipLet
             do! skipWhitespaces
             let! binding = withState parseAtom
+
+            // body
             do! skipWhitespaces
             do! withState (skipAtom "=")
             do! skipWhitespaces
             let! body = withState parseExpr
+
+            // fin
             do! popState letState
             return Let (binding, body) }
 

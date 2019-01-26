@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Sedela.fs" />
+    <Compile Include="WssParser.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
