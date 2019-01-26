@@ -325,6 +325,12 @@ module Sedela =
             do! skipWhitespaces
             return Binding atomStr }
 
+    let parseUnit: Parser<Expr, BlockState> =
+        parse {
+            do! skipString "()"
+            do! skipWhitespaces
+            return Unit }
+
     let parseEnclosure : Parser<Expr, BlockState> =
         parse {
             let! oldState = pushState
@@ -367,18 +373,14 @@ module Sedela =
             let! predicate = withState parseExpr
 
             // then
-            let! thenState = withState pushState
             do! skipThen
             do! skipWhitespaces
             let! consequent = withState parseExpr
-            do! popState thenState
                 
             // else
-            let! elseState = withState pushState
             do! skipElse
             do! skipWhitespaces
             let! alternative = withState parseExpr
-            do! popState elseState
 
             // fin
             do! popState ifState
@@ -387,9 +389,10 @@ module Sedela =
     do parseExprRef :=
         attempt parseLet <|>
         attempt parseIf <|>
-        attempt parseEnclosure <|>
         attempt parseDerivation <|>
-        attempt parseBinding
+        attempt parseEnclosure <|>
+        attempt parseBinding <|>
+        attempt parseUnit
 
     let tryParseFromString str =
         match tryParseBlockFromString str with
