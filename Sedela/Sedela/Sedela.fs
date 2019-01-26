@@ -65,6 +65,9 @@ type Block' =
       PositionBegin : Position
       PositionEnd : Position }
 
+    static member isRoot block =
+        Option.isNone block.ParentOpt
+
     static member getRoot block =
         match block.ParentOpt with
         | Some parent -> Block'.getRoot parent
@@ -99,8 +102,9 @@ type Block' =
     static member fromIndex index block =
         let blocks = Block'.getFlattened block
         let candidates = Array.filter (Block'.containsIndex index) blocks
-        let ordered = Array.sortBy Block'.getLength candidates
-        Array.head ordered
+        match Array.sortBy Block'.getLength candidates with
+        | [||] -> block
+        | ordered -> Array.head ordered
 
     static member getAncestors block =
         let ancestors = List ()
@@ -167,7 +171,7 @@ type Expr =
     | Binding of string
     | If of Expr * Expr * Expr
     | Let of string * Expr
-    | Derivation of Expr list
+    | Derivation of Expr * Expr list
 
 module Sedela =
 
@@ -314,7 +318,7 @@ module Sedela =
             let! meaning = attempt parseBinding <|> attempt parseEnclosure
             let! args = many1 (parseTill >>. (attempt parseBinding <|> attempt parseEnclosure))
             do! popState oldState
-            return Derivation (meaning :: args) }
+            return Derivation (meaning, args) }
 
     let parseLet : Parser<Expr, BlockState> =
         parse {
