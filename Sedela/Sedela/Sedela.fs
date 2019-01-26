@@ -201,6 +201,9 @@ module Sedela =
     let skipWhitespaces<'a> : Parser<unit, 'a> =
         skipMany skipWhitespace<'a>
 
+    let skip1Whitespaces<'a> : Parser<unit, 'a> =
+        skipMany1 skipWhitespace<'a>
+
     let recur parser =
         attempt
             (parse {
@@ -274,21 +277,21 @@ module Sedela =
         parse {
             do! setUserState oldState }
 
-    let rec subparse parse : Parser<_, BlockState> =
+    let rec subState parse parse2 : Parser<_, BlockState> =
         Primitives.parse {
             let! oldState = pushState
-            do! parseTill
-            let! expr = parse
+            let! _ = withState parse
+            let! expr = parse2
             do! popState oldState
             return expr }
 
-    and parseTill : Parser<_, BlockState> =
-        parse {
+    and withState parse : Parser<_, BlockState> =
+        Primitives.parse {
             let! position = getPosition
             let! state = getUserState
             let currentBlock = Block'.fromIndex position.Index state.Root
             if currentBlock = state.Limiter || Block'.isAncestor state.Limiter currentBlock
-            then return ()
+            then return! parse
             else return! fail "End of block." }
 
     let parseAtom : Parser<string, BlockState> =
@@ -297,74 +300,89 @@ module Sedela =
             let str = (chars |> String.implode).TrimEnd ()
             return str }
 
+    let skipAtom str =
+        parse {
+            let! atom = parseAtom
+            if atom = str
+            then return ()
+            else return! fail "Unexpected atom." }
+
+    let skipLet = skipAtom "let"
+    let skipIf = skipAtom "if"
+    let skipThen = skipAtom "then"
+    let skipElse = skipAtom "else"
+
+    let skipForm =
+        attempt skipLet <|>
+        attempt skipIf <|>
+        attempt skipThen <|>
+        attempt skipElse
+
     let parseBinding : Parser<Expr, BlockState> =
         parse {
+            do! notFollowedBy skipForm
             let! atomStr = parseAtom
             do! skipWhitespaces
             return Binding atomStr }
 
     let parseEnclosure : Parser<Expr, BlockState> =
         parse {
+            let! oldState = pushState
             do! skipString "("
             do! skipWhitespaces
-            let! expr = subparse parseExpr
-            do! skipString ")"
+            let! expr = withState parseExpr
+            do! withState (skipString ")")
             do! skipWhitespaces
+            do! popState oldState
             return expr }
 
     let rec parseDerivation : Parser<Expr, BlockState> =
         parse {
             let! oldState = pushState
             let! meaning = attempt parseBinding <|> attempt parseEnclosure
-            let! args = many1 (parseTill >>. (attempt parseBinding <|> attempt parseEnclosure))
+            let! args = many1 (withState (attempt parseBinding <|> attempt parseEnclosure))
             do! popState oldState
             return Derivation (meaning, args) }
 
     let parseLet : Parser<Expr, BlockState> =
         parse {
-            do! skipString "let"
+            let! letState = pushState
+            do! skipLet
             do! skipWhitespaces
-            let! binding = parseAtom
+            let! binding = withState parseAtom
             do! skipWhitespaces
-            do! skipString "="
+            do! withState (skipAtom "=")
             do! skipWhitespaces
-            let! body = subparse parseExpr
+            let! body = withState parseExpr
+            do! popState letState
             return Let (binding, body) }
 
     let parseIf =
         parse {
             
             // if
-            let! ifPosition = getPosition
-            let! ifState = getUserState
-            let ifBlock = Block'.fromIndex ifPosition.Index ifState.Root
-            do! skipString "if"
+            let! ifState = pushState
+            do! skipIf
             do! skipWhitespaces
-            let! predicate = subparse parseExpr
-            do! skipWhitespaces
+            let! predicate = withState parseExpr
 
             // then
-            let! thenPosition = getPosition
-            let! thenState = getUserState
-            let thenBlock = Block'.fromIndex thenPosition.Index thenState.Root
-            do! skipString "then"
+            let! thenState = withState pushState
+            do! skipThen
             do! skipWhitespaces
-            let! consequent = subparse parseExpr
-            if thenBlock.ParentOpt = ifBlock.ParentOpt then
+            let! consequent = withState parseExpr
+            do! popState thenState
                 
-                // else
-                let! elsePosition = getPosition
-                let! elseState = getUserState
-                let elseBlock = Block'.fromIndex elsePosition.Index elseState.Root
-                do! skipString "else"
-                do! skipWhitespaces
-                let! alternative = subparse parseExpr
-                if elseBlock.ParentOpt = ifBlock.ParentOpt
-                then return If (predicate, consequent, alternative)
-                else return! fail "Invalid if layout."
-                
-            // failure
-            else return! fail "Invalid if layout." }
+            // else
+            let! elseState = withState pushState
+            do! skipElse
+            do! skipWhitespaces
+            let! alternative = withState parseExpr
+            do! popState elseState
+
+            // fin
+            do! popState ifState
+            return If (predicate, consequent, alternative) }
             
     do parseExprRef :=
         attempt parseLet <|>
@@ -376,12 +394,7 @@ module Sedela =
     let tryParseFromString str =
         match tryParseBlockFromString str with
         | Right block ->
-            match
-                runParserOnString
-               parseExprs
-                { Root = block; Limiter = block }
-                    ""
-               str with
+            match runParserOnString parseExprs { Root = block; Limiter = block } "" str with
             | Success (exprs, _, _) -> Right exprs
             | Failure (error, _, _) -> Left error
         | Left error -> Left error
