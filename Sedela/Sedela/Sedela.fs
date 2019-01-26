@@ -132,7 +132,7 @@ type Block' =
             for child in block.Children do
                 let child' = Block'.makeShallow child (Some block')
                 block'.Children.Add child'
-                import child block'
+                import child child'
         let block' = Block'.makeShallow block parentOpt
         import block block'
         block'
