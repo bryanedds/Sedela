@@ -205,11 +205,10 @@ module Sedela =
         skipMany1 skipWhitespace<'a>
 
     let recur parser =
-        attempt
-            (parse {
-                do! eof
-                return None } <|>
-             parser)
+        attempt ^ parse {
+            do! eof
+            return None } <|>
+            parser
 
     let backtrack (position : Position) =
         (fun stream ->
@@ -345,8 +344,15 @@ module Sedela =
     let rec parseDerivation : Parser<Expr, BlockState> =
         parse {
             let! oldState = pushState
-            let! meaning = attempt parseBinding <|> attempt parseEnclosure
-            let! args = many1 (withState (attempt parseBinding <|> attempt parseEnclosure))
+            let! meaning = attempt parseEnclosure <|> attempt parseBinding
+            let! args = many1 ^ parse {
+                let! position = getPosition
+                let! state = getUserState
+                let current = Block'.fromIndex position.Index state.Root
+                return!
+                    if current.ParentOpt = Some state.Limiter
+                    then withState (attempt parseDerivation <|> attempt parseEnclosure <|> attempt parseBinding)
+                    else withState (attempt parseEnclosure <|> attempt parseBinding) }
             do! popState oldState
             return Derivation (meaning, args) }
 
@@ -365,7 +371,7 @@ module Sedela =
 
     let parseIf =
         parse {
-            
+
             // if
             let! ifState = pushState
             do! skipIf
@@ -376,7 +382,7 @@ module Sedela =
             do! skipThen
             do! skipWhitespaces
             let! consequent = withState parseExpr
-                
+
             // else
             do! skipElse
             do! skipWhitespaces
@@ -385,7 +391,7 @@ module Sedela =
             // fin
             do! popState ifState
             return If (predicate, consequent, alternative) }
-            
+
     do parseExprRef :=
         attempt parseLet <|>
         attempt parseIf <|>
