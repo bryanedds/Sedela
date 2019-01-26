@@ -287,7 +287,7 @@ module Sedela =
             let! position = getPosition
             let! state = getUserState
             let currentBlock = Block'.fromIndex position.Index state.Root
-            if currentBlock = state.Limiter || currentBlock.ParentOpt = Some state.Limiter
+            if currentBlock = state.Limiter || Block'.isAncestor state.Limiter currentBlock
             then return ()
             else return! fail "End of block." }
 
@@ -376,7 +376,12 @@ module Sedela =
     let tryParseFromString str =
         match tryParseBlockFromString str with
         | Right block ->
-            match runParserOnString parseExprs { Root = block; Limiter = block } "" str with
+            match
+                runParserOnString
+               parseExprs
+                { Root = block; Limiter = block }
+                    ""
+               str with
             | Success (exprs, _, _) -> Right exprs
             | Failure (error, _, _) -> Left error
         | Left error -> Left error
