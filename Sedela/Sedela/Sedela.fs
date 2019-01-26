@@ -59,10 +59,16 @@ type Block =
 
 [<ReferenceEquality>]
 type Block' =
-    { ParentOpt : Block' option
+    { Text : string
+      ParentOpt : Block' option
       Children : Block' List
       PositionBegin : Position
       PositionEnd : Position }
+
+    static member getRoot block =
+        match block.ParentOpt with
+        | Some parent -> Block'.getRoot parent
+        | None -> block
 
     static member getFlattened block =
         let rec flatten' block (blocks : Block' List) =
@@ -81,11 +87,11 @@ type Block' =
     static member getLength block =
         block.PositionEnd.Index - block.PositionBegin.Index
 
-    static member getText (textFull : string) block =
-        textFull.Substring (int block.PositionBegin.Index, int block.PositionEnd.Index)
+    static member getText (fullText : string) block =
+        fullText.Substring (int block.PositionBegin.Index, int block.PositionEnd.Index)
 
     static member containsIndex index block =
-        index >= block.PositionBegin.Index && index <= block.PositionEnd.Index
+        index >= block.PositionBegin.Index && index < block.PositionEnd.Index
 
     static member toIndex block =
         block.PositionBegin.Index
@@ -110,7 +116,8 @@ type Block' =
 
     static member makeShallow (block : Block) (parentOpt : Block' option) =
         let block' =
-            { ParentOpt = parentOpt
+            { Text = block.Text
+              ParentOpt = parentOpt
               Children = List ()
               PositionBegin = block.PositionBegin
               PositionEnd = block.PositionEnd }
@@ -127,7 +134,12 @@ type Block' =
         block'
 
     static member makeFromBlocks blocks positionBegin positionEnd =
-        let root = { ParentOpt = None; Children = List (); PositionBegin = positionBegin; PositionEnd = positionEnd }
+        let root =
+            { Text = ""
+              ParentOpt = None
+              Children = List ()
+              PositionBegin = positionBegin
+              PositionEnd = positionEnd }
         for block in blocks do
             let block' = Block'.makeFromBlock block (Some root)
             root.Children.Add block'
@@ -245,16 +257,25 @@ module Sedela =
     let parseExprs =
         many parseExpr
 
-    let rec subparse parse : Parser<_, BlockState> =
-        Primitives.parse {
+    let pushState =
+        parse {
             let! position = getPosition
             let! oldState = getUserState
             let currentBlock = Block'.fromIndex position.Index oldState.Root
             let currentState = { oldState with Limiter = currentBlock }
             do! setUserState currentState
-            let! expr = parse
+            return oldState }
+
+    let popState oldState =
+        parse {
+            do! setUserState oldState }
+
+    let rec subparse parse : Parser<_, BlockState> =
+        Primitives.parse {
+            let! oldState = pushState
             do! parseTill
-            do! setUserState oldState
+            let! expr = parse
+            do! popState oldState
             return expr }
 
     and parseTill : Parser<_, BlockState> =
@@ -263,8 +284,8 @@ module Sedela =
             let! state = getUserState
             let currentBlock = Block'.fromIndex position.Index state.Root
             if currentBlock = state.Limiter || currentBlock.ParentOpt = Some state.Limiter
-            then return! fail "Still parsing..."
-            else return () }
+            then return ()
+            else return! fail "End of block." }
 
     let parseAtom : Parser<string, BlockState> =
         parse {
@@ -289,11 +310,11 @@ module Sedela =
 
     let rec parseDerivation : Parser<Expr, BlockState> =
         parse {
-                let! meaning = parseBinding <|> parseEnclosure
-                let! exprs = subparse (Primitives.parse {
-                    let! args = many1Till (parseBinding <|> parseEnclosure) parseTill
-                    return meaning :: args })
-                return Derivation exprs }
+            let! oldState = pushState
+            let! meaning = attempt parseBinding <|> attempt parseEnclosure
+            let! args = many1 (parseTill >>. (attempt parseBinding <|> attempt parseEnclosure))
+            do! popState oldState
+            return Derivation (meaning :: args) }
 
     let parseLet : Parser<Expr, BlockState> =
         parse {
