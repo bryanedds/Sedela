@@ -341,18 +341,23 @@ module Sedela =
             do! popState oldState
             return expr }
 
+    let parseSubderivation =
+        attempt parseEnclosure <|>
+        attempt parseBinding <|>
+        attempt parseUnit
+
     let rec parseDerivation : Parser<Expr, BlockState> =
         parse {
             let! oldState = pushState
-            let! meaning = attempt parseEnclosure <|> attempt parseBinding
+            let! meaning = parseSubderivation
             let! args = many1 ^ parse {
                 let! position = getPosition
                 let! state = getUserState
                 let current = Block'.fromIndex position.Index state.Root
                 return!
                     if current.ParentOpt = Some state.Limiter
-                    then withState (attempt parseDerivation <|> attempt parseEnclosure <|> attempt parseBinding)
-                    else withState (attempt parseEnclosure <|> attempt parseBinding) }
+                    then withState (attempt parseDerivation <|> parseSubderivation)
+                    else withState parseSubderivation }
             do! popState oldState
             return Derivation (meaning, args) }
 
@@ -373,7 +378,6 @@ module Sedela =
         parse {
 
             // if
-            let! ifState = pushState
             do! skipIf
             do! skipWhitespaces
             let! predicate = withState parseExpr
@@ -389,7 +393,6 @@ module Sedela =
             let! alternative = withState parseExpr
 
             // fin
-            do! popState ifState
             return If (predicate, consequent, alternative) }
 
     do parseExprRef :=
