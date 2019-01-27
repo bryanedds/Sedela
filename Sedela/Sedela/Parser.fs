@@ -104,7 +104,11 @@ module Parser =
         static member fromIndex index block =
             let blocks = Block.getFlattened block
             let candidates = Array.filter (Block.containsIndex index) blocks
-            match Array.sortBy Block.getLength candidates with
+            let biasedAgainstRoot =
+                if Array.length candidates > 1 && Array.contains block candidates
+                then Array.remove Block.isRoot candidates
+                else candidates
+            match Array.sortBy Block.getLength biasedAgainstRoot with
             | [||] -> block
             | ordered -> Array.head ordered
 
@@ -257,8 +261,9 @@ module Parser =
     let pushScope scope =
         parse {
             let! position = getPosition
-            let newScope = { scope with Limiter = Block.fromIndex position.Index scope.Root }
-            return newScope }
+            let block = Block.fromIndex position.Index scope.Root
+            let scope = { scope with Limiter = block }
+            return scope }
 
     let inScope scope parse =
         Primitives.parse {
@@ -297,6 +302,11 @@ module Parser =
             else return! fail "Unexpected atom." }
 
     let skipUnit = skipString "()" >>. skipWhitespaces
+    let skipEquality = skipString "=" >>. skipWhitespaces
+    let skipColon = skipString ":" >>. skipWhitespaces
+    let skipComma = skipString "," >>. skipWhitespaces
+    let skipCaretOpen = skipString "<" >>. skipWhitespaces
+    let skipCaretClose = skipString ">" >>. skipWhitespaces
 
     let skipLet = skipValueAtom "let" >>. skipWhitespaces
     let skipIf = skipValueAtom "if" >>. skipWhitespaces
@@ -309,21 +319,27 @@ module Parser =
         attempt skipThen <|>
         attempt skipElse
 
-    let rec parseTypeRecord =
+    let rec parseTypeRecord scope =
         parse {
             let! atom = parseTypeAtom
             let! parsOpt = opt (attempt (parse {
-                do! skipString "<" >>. skipWhitespaces
-                let! pars = sepBy1 (parseTypeRecord .>> skipWhitespaces) (skipString "," >>. skipWhitespaces)
-                do! skipString ">" >>. skipWhitespaces
+                do! inScope scope skipCaretOpen
+                let! pars =
+                    sepBy1
+                        (inScope scope (parseTypeRecord scope) .>> skipWhitespaces)
+                        (inScope scope skipComma)
+                do! inScope scope skipCaretClose
                 return pars }))
             return { TypeName = atom; TypePars = Option.defaultValue [] parsOpt }}
 
-    and parseBinding =
+    and parseBinding scope =
         parse {
             do! notFollowedBy skipForm
             let! atomStr = parseValueAtom
-            let! typeRecordOpt = opt (attempt (skipString ":" >>. skipWhitespaces >>. parseTypeRecord))
+            let! typeRecordOpt = opt (attempt (parse {
+                do! inScope scope skipColon
+                let! typeRecord = inScope scope (parseTypeRecord scope)
+                return typeRecord }))
             return Binding (atomStr, typeRecordOpt) }
 
     let parseUnit =
@@ -341,7 +357,7 @@ module Parser =
 
     let parseApplyFragment scope =
         attempt (parseEnclosure scope) <|>
-        attempt parseBinding <|>
+        attempt (parseBinding scope) <|>
         attempt parseUnit
 
     let rec parseApply scope =
@@ -353,7 +369,7 @@ module Parser =
                 let block = Block.fromIndex position.Index scope.Root
                 return!
                     if block.ParentOpt = Some scope.Limiter
-                    then inScope scope (attempt (parseApply scope) <|> parseApplyFragment scope)
+                    then inScope scope (attempt (parseApply scope) <|> attempt (parseApplyFragment scope))
                     else inScope scope (parseApplyFragment scope) }
             return Apply (fn, args) }
 
@@ -366,7 +382,7 @@ module Parser =
             let! binding = inScope scope parseValueAtom
 
             // body
-            do! inScope scope (skipString "=" >>. skipWhitespaces)
+            do! inScope scope skipEquality
             let! body = inScope scope (parseExpr scope)
             return Let (binding, body) }
 
@@ -394,7 +410,7 @@ module Parser =
             attempt (parseIf scope) <|>
             attempt (parseApply scope) <|>
             attempt (parseEnclosure scope) <|>
-            attempt parseBinding <|>
+            attempt (parseBinding scope) <|>
             attempt parseUnit
 
     let tryParseFromString str =
