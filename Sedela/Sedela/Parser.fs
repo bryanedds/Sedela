@@ -155,22 +155,13 @@ module Parser =
         { Limiter : Block
           Root : Block }
 
-    type Opening =
-        | If // allows for \nthen, \nelif, \nelse, and indent connectives
-        | Let // allows for indent connectuves
-        | Segmented // allows for \n| connectives
-        | Unparsed of string
-
-    type Connective =
-        | NewlineIndent
-        | NewlineThen
-        | NewlineElif
-        | NewlineElse
-        | NewlineBar
+    type TypeRecord =
+        { TypeName : string
+          TypePars : TypeRecord list }
 
     type Expr =
         | Unit
-        | Binding of string
+        | Binding of string * TypeRecord option
         | If of Expr * Expr * Expr
         | Let of string * Expr
         | Apply of Expr * Expr list
@@ -180,10 +171,8 @@ module Parser =
     let [<Literal>] WhitespaceChars = OffsetChars + NewlineChars
     let [<Literal>] LineCommentStr = "//"
     let [<Literal>] ReservedChars = "{}\\#$"
-    let [<Literal>] StructureCharsNoStr = "()"
-    let [<Literal>] StructureChars = "\"" + StructureCharsNoStr
-    let (*Literal*) IllegalNameChars = ReservedChars + StructureChars + WhitespaceChars
-    let (*Literal*) IllegalNameCharsArray = Array.ofSeq IllegalNameChars
+    let [<Literal>] ValueStructureChars = "();,\""
+    let [<Literal>] TypeStructureChars = ValueStructureChars + "<>"
 
     let skipLineComment<'a> : Parser<unit, 'a> =
         parse {
@@ -280,23 +269,42 @@ module Parser =
             then return! parse
             else return! fail "End of block." }
 
-    let parseAtom =
+    let parseValueAtom =
         parse {
-            let! chars = many1 (noneOf (StructureChars + WhitespaceChars))
+            let! chars = many1 (noneOf (ValueStructureChars + WhitespaceChars))
+            do! skipWhitespaces
             let str = (chars |> String.implode).TrimEnd ()
             return str }
 
-    let skipAtom str =
+    let skipValueAtom str =
         parse {
-            let! atom = parseAtom
+            let! atom = parseValueAtom
             if atom = str
             then return ()
             else return! fail "Unexpected atom." }
 
-    let skipLet = skipAtom "let"
-    let skipIf = skipAtom "if"
-    let skipThen = skipAtom "then"
-    let skipElse = skipAtom "else"
+    let parseTypeAtom =
+        parse {
+            let! chars = many1 (noneOf (TypeStructureChars + WhitespaceChars))
+            do! skipWhitespaces
+            let str = (chars |> String.implode).TrimEnd ()
+            return str }
+
+    let skipTypeAtom str =
+        parse {
+            let! atom = parseTypeAtom
+            if atom = str
+            then return ()
+            else return! fail "Unexpected atom." }
+
+    let skipUnit =
+        skipString "()" >>. skipWhitespaces
+
+    let skipLet = skipValueAtom "let" >>. skipWhitespaces
+    let skipIf = skipValueAtom "if" >>. skipWhitespaces
+    let skipThen = skipValueAtom "then" >>. skipWhitespaces
+    let skipElse = skipValueAtom "else" >>. skipWhitespaces
+    let skipEquality = skipValueAtom "=" >>. skipWhitespaces
 
     let skipForm =
         attempt skipLet <|>
@@ -304,27 +312,34 @@ module Parser =
         attempt skipThen <|>
         attempt skipElse
 
-    let parseBinding =
+    let rec parseTypeRecord =
+        parse {
+            let! atom = parseTypeAtom
+            let! parsOpt = opt (attempt (parse {
+                do! skipString "<" >>. skipWhitespaces
+                let! pars = sepBy1 (parseTypeRecord .>> skipWhitespaces) (skipString "," >>. skipWhitespaces)
+                do! skipString ">" >>. skipWhitespaces
+                return pars }))
+            return { TypeName = atom; TypePars = Option.defaultValue [] parsOpt }}
+
+    and parseBinding =
         parse {
             do! notFollowedBy skipForm
-            let! atomStr = parseAtom
-            do! skipWhitespaces
-            return Binding atomStr }
+            let! atomStr = parseValueAtom
+            let! typeRecordOpt = opt (attempt (skipString ":" >>. skipWhitespaces >>. parseTypeRecord))
+            return Binding (atomStr, typeRecordOpt) }
 
     let parseUnit =
         parse {
-            do! skipString "()"
-            do! skipWhitespaces
+            do! skipUnit
             return Unit }
 
     let parseEnclosure =
         parse {
             let! openingScope = pushScope
-            do! skipString "("
-            do! skipWhitespaces
+            do! skipString "(" >>. skipWhitespaces
             let! expr = inScope parseExpr
-            do! inScope (skipString ")")
-            do! skipWhitespaces
+            do! inScope (skipString ")" >>. skipWhitespaces)
             do! popScope openingScope
             return expr }
 
@@ -354,13 +369,10 @@ module Parser =
             // binding
             let! letScope = pushScope
             do! skipLet
-            do! skipWhitespaces
-            let! binding = inScope parseAtom
+            let! binding = inScope parseValueAtom
 
             // body
-            do! skipWhitespaces
-            do! inScope (skipAtom "=")
-            do! skipWhitespaces
+            do! inScope skipEquality
             let! body = inScope parseExpr
 
             // fin
@@ -372,17 +384,14 @@ module Parser =
 
             // if
             do! skipIf
-            do! skipWhitespaces
             let! predicate = inScope parseExpr
 
             // then
-            do! skipThen
-            do! skipWhitespaces
+            do! inScope skipThen
             let! consequent = inScope parseExpr
 
             // else
-            do! skipElse
-            do! skipWhitespaces
+            do! inScope skipElse
             let! alternative = inScope parseExpr
 
             // fin
