@@ -3,9 +3,7 @@
 Sedela is a **typed, denotational, and partially informal program design language**.  
 Its purpose is to let software designers express the **meaning** and **structure** of a system *before* implementation—cleanly, precisely, and without being constrained by the quirks of any particular programming language.
 
-Sedela is inspired by Conal Elliott’s *Denotational Design* and extends it with **propositions**, enabling a flexible blend of formal and informal specification.
-
-> **Semantic Design = Denotational Design + Propositions**
+Sedela is inspired by Conal Elliott’s *Denotational Design* and appends that with **propositions**, enabling a flexible blend of formal and informal specification.
 
 Sedela is *not* a programming language.  
 It has **no compiler**, **no interpreter**, and **no runtime semantics**.  
