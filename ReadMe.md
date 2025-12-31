@@ -78,6 +78,77 @@ Sedela unifies these ideas into a single, coherent semantic language.
 
 ---
 
+# 🌟 **Sedela’s Value Proposition**
+
+Most tools fall into one of two buckets:
+
+### **1. Programming languages**  
+They force you to express your design in terms of execution, side effects, and implementation constraints.
+
+### **2. Documentation tools (UML, diagrams, prose)**  
+They’re informal, untyped, and not machine-checkable.
+
+However, Sedela gives you something that no other tool provides:
+
+> **A way to formally and informally describe the *meaning* of a system’s architecture without being inhibited by implementation details.**
+
+Sedela sits in the middle:
+
+### ✔ **Formal enough to be type-checked**  
+### ✔ **Informal enough to describe messy or legacy systems**  
+### ✔ **Expressive enough to capture design intent**  
+### ✔ **Structured enough to be unambiguous**  
+### ✔ **Free from implementation constraints**  
+
+This combination is unique.
+
+---
+
+# 🧩 **Why this matters in the real world**
+
+Most large systems suffer from the same problems:
+
+- The architecture exists only in people’s heads  
+- The codebase doesn’t reflect the intended design  
+- Documentation is incomplete or outdated  
+- Legacy systems can’t be fully formalized  
+- Implementation details distort the conceptual model  
+
+Sedela directly addresses these pain points.
+
+It gives you:
+
+### **A single, typed, semantically rich language for expressing the architecture itself.**
+
+Not the code.  
+Not the runtime.  
+Not the implementation.  
+The *architecture*.
+
+---
+
+# 🌱 **Why this is genuinely valuable**
+
+Because in software, the biggest failures aren’t caused by bad code — they’re caused by:
+
+- unclear architecture  
+- mismatched mental models  
+- undocumented assumptions  
+- lost design intent  
+- accidental complexity  
+
+Sedela gives you a way to capture the *meaning* of a system so that:
+
+- implementations can vary  
+- teams can align  
+- intent is preserved  
+- structure is explicit  
+- complexity is tamed  
+
+That’s a real, practical, and unique value proposition.
+
+---
+
 ## 📘 Language Overview
 
 Sedela includes:
