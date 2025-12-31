@@ -56,38 +56,6 @@ This dual approach lets designers choose the right level of precision for each p
 
 Sedela is about **design**, not execution.
 
-## 🧩 How Sedela Uses the Term *Semantics*
-
-The word **“semantics”** is heavily overloaded in computer science, so it’s important to clarify what it means in the context of Sedela. In programming‑language theory, *semantics* usually refers to the **behavior of a program when it runs**—for example:
-
-- **Operational semantics:** step‑by‑step execution rules  
-- **Denotational semantics:** mapping programs to mathematical functions  
-- **Axiomatic semantics:** reasoning about correctness  
-
-Sedela does not use the term in this sense.
-
-### **Sedela’s semantics are about design meaning, not execution behavior.**
-
-Sedela is a **pure design language**, not a programming language.  
-It has no interpreter, no runtime, and no notion of program execution.  
-Instead, Sedela uses “semantics” to refer to the **meaning of a system’s structure**, including:
-
-- the meaning of types and type relationships  
-- the meaning of categories (similar to type classes)  
-- the meaning of architectural components  
-- the meaning of domain concepts  
-- the meaning of design intent  
-
-This meaning can be expressed in two complementary ways:
-
-### **1. Formal semantics**  
-Using algebraic data types, typed lambda calculus, categories, and witnesses.
-
-### **2. Informal semantics**  
-Using natural‑language **propositions** to describe intent, behavior, or constraints that are too complex or unnecessary to formalize.
-
-Together, these form what Sedela calls **Semantic Design**: This approach allows Sedela to describe both rigorously defined components *and* partially specified or legacy systems where full formalization is impractical or undesirable. In short, **Sedela’s semantics describe what a system *means*, not how it *executes*.**
-
 ---
 
 ## 📘 Language Overview
@@ -153,6 +121,40 @@ let call (mfn : MetaFunction) provider intent args =
 ```
 
 This example demonstrates how Sedela can describe complex distributed systems using a mix of formal types and informal propositions.
+
+---
+
+## 🧩 How Sedela Uses the Term *Semantics*
+
+The word **“semantics”** is heavily overloaded in computer science, so it’s important to clarify what it means in the context of Sedela. In programming‑language theory, *semantics* usually refers to the **behavior of a program when it runs**—for example:
+
+- **Operational semantics:** step‑by‑step execution rules  
+- **Denotational semantics:** mapping programs to mathematical functions  
+- **Axiomatic semantics:** reasoning about correctness  
+
+Sedela does not use the term in this sense.
+
+### **Sedela’s semantics are about design meaning, not execution behavior.**
+
+Sedela is a **pure design language**, not a programming language.  
+It has no interpreter, no runtime, and no notion of program execution.  
+Instead, Sedela uses “semantics” to refer to the **meaning of a system’s structure**, including:
+
+- the meaning of types and type relationships  
+- the meaning of categories (similar to type classes)  
+- the meaning of architectural components  
+- the meaning of domain concepts  
+- the meaning of design intent  
+
+This meaning can be expressed in two complementary ways:
+
+### **1. Formal semantics**  
+Using algebraic data types, typed lambda calculus, categories, and witnesses.
+
+### **2. Informal semantics**  
+Using natural‑language **propositions** to describe intent, behavior, or constraints that are too complex or unnecessary to formalize.
+
+Together, these form what Sedela calls **Semantic Design**: This approach allows Sedela to describe both rigorously defined components *and* partially specified or legacy systems where full formalization is impractical or undesirable. In short, **Sedela’s semantics describe what a system *means*, not how it *executes*.**
 
 ---
 
