@@ -56,6 +56,26 @@ This dual approach lets designers choose the right level of precision for each p
 
 Sedela is about **design**, not execution.
 
+Sedela aims to provide:
+
+- A **formal yet human‑readable language** for describing software systems.
+- A **semantic** (meaning‑driven) rather than syntactic (notation‑driven) approach.
+- A way to express **design intent**, not just structure.
+- A bridge between **architecture**, **domain modeling**, and **implementation guidance**.
+
+This places Sedela in the same conceptual family as:
+
+| Language / Framework | Similarity |
+|----------------------|------------|
+| UML                  | Structural modeling, diagrams |
+| SysML                | Systems engineering semantics |
+| TLA+                 | Formal specification, correctness |
+| Alloy                | Declarative modeling |
+| Domain‑Driven Design | Ubiquitous language, domain semantics |
+| Architecture DSLs    | High‑level system design |
+
+Sedela unifies these ideas into a single, coherent semantic language.
+
 ---
 
 ## 📘 Language Overview
