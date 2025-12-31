@@ -56,17 +56,15 @@ This dual approach lets designers choose the right level of precision for each p
 
 Sedela is about **design**, not execution.
 
-### How Sedela Uses the Term *Semantics*
+## 🧩 How Sedela Uses the Term *Semantics*
 
-The word **“semantics”** is heavily overloaded in computer science, so it’s important to clarify what it means in the context of Sedela.
-
-In programming‑language theory, *semantics* usually refers to the **behavior of a program when it runs**—for example:
+The word **“semantics”** is heavily overloaded in computer science, so it’s important to clarify what it means in the context of Sedela. In programming‑language theory, *semantics* usually refers to the **behavior of a program when it runs**—for example:
 
 - **Operational semantics:** step‑by‑step execution rules  
 - **Denotational semantics:** mapping programs to mathematical functions  
 - **Axiomatic semantics:** reasoning about correctness  
 
-Sedela does **not** use the term in this sense.
+Sedela does not use the term in this sense.
 
 ### **Sedela’s semantics are about design meaning, not execution behavior.**
 
@@ -88,9 +86,7 @@ Using algebraic data types, typed lambda calculus, categories, and witnesses.
 ### **2. Informal semantics**  
 Using natural‑language **propositions** to describe intent, behavior, or constraints that are too complex or unnecessary to formalize.
 
-Together, these form what Sedela calls **Semantic Design**: This approach allows Sedela to describe both rigorously defined components *and* partially specified or legacy systems where full formalization is impractical or undesirable. So in short:
-
-### **Sedela’s semantics describe what a system *means*, not how it *executes*.**
+Together, these form what Sedela calls **Semantic Design**: This approach allows Sedela to describe both rigorously defined components *and* partially specified or legacy systems where full formalization is impractical or undesirable. In short, **Sedela’s semantics describe what a system *means*, not how it *executes*.**
 
 ---
 
