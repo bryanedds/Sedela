@@ -162,8 +162,8 @@ Products and sums, similar to ML/Haskell.
 
 ```sedela
 type Maybe<a> =
-| Some of a
-| None
+  | Some of a
+  | None
 ```
 
 ### **Functions**
@@ -171,7 +171,7 @@ Typed lambda expressions or propositions.
 
 ```sedela
 let symbolToString (s : Symbol) : String =
-Proposition "Convert a symbol to string."
+  Proposition "Convert a symbol to string."
 ```
 
 ### **Categories (Type Classes)**
@@ -179,7 +179,7 @@ With optional constraints and witnesses.
 
 ```sedela
 category Monad<m; Applicative<m>> =
-bind<a, b> : m<a> -> (a -> m<b>) -> m<b>
+  bind<a, b> : m<a> -> (a -> m<b>) -> m<b>
 ```
 
 ### **Witnesses**
@@ -187,10 +187,10 @@ Provide implementations for category members.
 
 ```sedela
 witness Monad =
-pure = vsyncReturn
-map = vsyncMap
-apply = vsyncApply
-bind = vsyncBind
+  pure = vsyncReturn
+  map = vsyncMap
+  apply = vsyncApply
+  bind = vsyncBind
 ```
 
 ---
@@ -201,10 +201,10 @@ Sedela includes a full semantic design for **MetaFunctions**, a system architect
 
 ```sedela
 type MetaFunction =
-Provider -> Intent -> Symbol -> Vsync<Symbol>
+  Provider -> Intent -> Symbol -> Vsync<Symbol>
 
 let call (mfn : MetaFunction) provider intent args =
-mfn provider intent args
+  mfn provider intent args
 ```
 
 This example demonstrates how Sedela can describe complex distributed systems using a mix of formal types and informal propositions.
