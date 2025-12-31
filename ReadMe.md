@@ -143,8 +143,6 @@ Sedela gives you a way to capture the *meaning* of a system so that:
 - structure is explicit
 - complexity is tamed
 
-That’s a real, practical, and unique value proposition.
-
 ---
 
 ## 📘 Language Overview
