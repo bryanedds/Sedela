@@ -50,7 +50,7 @@ This dual approach lets designers choose the right level of precision for each p
 - A runtime system
 - A compiler or interpreter
 - A verification system with dependent types
-- An alternative to Agda, or Coq
+- An alternative to Agda or Coq
 
 Sedela is about **design**, not execution.
 
